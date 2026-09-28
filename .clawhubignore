@@ -1,0 +1,7 @@
+# Kept in the repository but not published to ClawHub
+evals/
+__pycache__/
+*.pyc
+.git/
+.gitignore
+.clawhubignore

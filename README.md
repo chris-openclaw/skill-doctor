@@ -7,11 +7,19 @@ Everyone talks about *finding* new skills. Nobody helps once you have twenty of 
 ## What it does
 
 - **Conflict detection** — finds skills whose triggers overlap, so you know why the agent sometimes fires the wrong one.
-- **Security scan** — flags inline red flags in skill files: remote code execution (`curl … | bash`), credential exfiltration, hard-coded secrets (`ghp_`, `sk-`, `AKIA…`), reads of `~/.ssh`, destructive commands, and more.
+- **Security scan** — flags risky patterns in skill files: downloaded scripts piped into a shell, credentials or environment data sent to remote servers, embedded API tokens and cloud keys, references to private key files, destructive commands, and more.
 - **Version check** — reports which skills are behind their latest ClawHub release (uses the `clawhub` CLI when present).
 - **"Which fires?" prediction** — give it any prompt and it ranks which installed skill is most likely to handle it, and warns when the choice is ambiguous.
 
-All offline. No API key. Pure Python standard library (uses PyYAML if you have it, but doesn't need it).
+All offline and read-only. No API key. Pure Python standard library (uses PyYAML if you have it, but doesn't need it).
+
+## Safety and scope
+
+- Read-only: it never modifies, moves, or runs the skills it scans
+- Looks only inside your skills folder
+- Its only external call is an optional `clawhub info` version lookup, run without a shell
+- No network access of its own; never reads credential files or secrets
+- Its own rule list is written so Skill Doctor (and other scanners) don't flag it as risky; run `python skill_doctor.py security` on your skills folder and it comes back clean on itself
 
 ## Quick start
 

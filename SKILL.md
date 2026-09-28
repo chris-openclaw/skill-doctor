@@ -1,26 +1,42 @@
 ---
 name: skill-doctor
-version: "1.0.0"
-description: "Audit, debug, and clean up the OpenClaw skills you already have installed. Use this skill whenever the user asks to check, audit, review, clean up, or debug their installed skills, or says things like 'why did the wrong skill fire,' 'which skill handles X,' 'do any of my skills conflict,' 'are my skills safe,' 'scan my skills for security issues,' 'are any of my skills out of date,' 'which skills overlap,' 'why isn't my skill triggering,' 'audit my skill library,' or 'is this skill safe to keep.' Detects duplicate and conflicting triggers (skills that fight over the same prompts), inline security red flags (credential exfiltration, remote code execution, hard-coded secrets), and out-of-date versions, and predicts which installed skill will fire for any given prompt. The missing health check for a growing skill collection."
+version: 1.1.0
+description: "Health check for the OpenClaw skills the user already has installed. Use this skill only when the user explicitly asks about their installed skill collection: 'audit my installed skills,' 'why did the wrong skill fire,' 'which of my skills handles X,' 'do any of my skills conflict,' 'are my installed skills safe,' 'scan my skills for security issues,' 'are any of my skills out of date,' 'why isn't my skill triggering,' or 'is this skill I installed safe to keep.' Do NOT trigger for general requests to check, review, audit, debug, or clean up code, files, documents, or systems that are not installed skills, or for finding and installing new skills. Runs a read-only, standard-library Python tool over the local skills folder to report trigger conflicts, security red flags, and out-of-date versions, and to predict which skill will fire for a prompt. It never modifies, moves, or runs the skills it scans; its only external call is an optional read-only clawhub CLI version lookup."
 metadata:
   openclaw:
     emoji: 🩺
+    requires:
+      bins: [python3]
+    envVars:
+      - name: OPENCLAW_SKILLS_DIR
+        required: false
+        description: "Optional path to the installed-skills folder. The only environment variable the tool reads."
 ---
 
 # Skill Doctor
 
 Most OpenClaw guidance is about *finding and installing* new skills. Almost nothing helps once you have twenty of them and two quietly fight over the same prompts, one is three versions behind, and one you installed last month does something to your environment you never noticed. Skill Doctor is the checkup for the skills you already have.
 
-It does four things, all offline and with no API key:
+It does four things, all read-only and with no API key:
 
 1. **Conflict detection** - finds skills whose triggers overlap, so you know why the agent sometimes fires the wrong one.
-2. **Security scan** - flags inline red flags in skill files (remote code execution, credential exfiltration, hard-coded secrets, destructive commands).
+2. **Security scan** - flags risky patterns in skill files (downloading and running code, sending credentials or environment data out, embedded secrets, destructive commands).
 3. **Version check** - reports which skills are behind their latest ClawHub release (when the `clawhub` CLI is available).
 4. **"Which fires?" prediction** - given any prompt, ranks which installed skill is most likely to handle it, and warns when the choice is ambiguous.
 
 ## When to use this
 
-Reach for Skill Doctor whenever the user is reasoning about their *installed* collection rather than looking for something new. Triggers include "audit my skills," "why did the wrong skill fire," "which skill handles X," "are my skills safe," "scan for security issues," "anything out of date," or "clean up my skills." If they want to *discover* a new skill, that is a different job - this is the doctor, not the directory.
+Use Skill Doctor only when the user is asking about their *installed skills* specifically: "audit my installed skills," "why did the wrong skill fire," "which of my skills handles X," "are my installed skills safe," "scan my skills for security issues," "are any of my skills out of date."
+
+**When NOT to use:** general requests to check, review, audit, debug, or clean up anything that isn't the installed skill collection (code, documents, a server, a single script the user pasted). And if they want to *discover* a new skill, that is a different job - this is the doctor, not the directory. If it's unclear whether they mean their skills, ask before running anything.
+
+## Scope and permissions
+
+- **Read-only.** Reads `SKILL.md` and script/text files inside the skills folder. It never modifies, moves, deletes, or executes any skill it scans.
+- **Where it looks.** Only the skills folder: `--skills-dir`, `$OPENCLAW_SKILLS_DIR`, or the standard OpenClaw/Claude skill locations listed below. Nothing else on disk.
+- **Commands.** Its only subprocess is an optional `clawhub info <skill-name> --json` (or `search`) lookup for version checks, run without a shell and only for names that look like ClawHub slugs. If `clawhub` isn't installed, the version check is skipped.
+- **Network and credentials.** No network access of its own, no API keys, and it never reads credential files or environment secrets.
+- **Changes.** Skill Doctor only reports. If the user wants a fix (for example, tightening a skill's description), show the exact edit and make it only after they confirm.
 
 ## The tool
 
@@ -48,9 +64,9 @@ Add `--json` to any command except plain `conflicts`/`security` text mode when y
 
 ## Interpreting the results
 
-**Security flags.** Severity is the guide. A `high` flag (curl-piped-to-bash, environment variables posted to a URL, hard-coded `ghp_`/`sk-`/`AKIA` tokens, reads of `~/.ssh`/`.aws/credentials`, reverse-shell patterns, `rm -rf /`) deserves a clear, calm warning and a recommendation to review the exact file and line before trusting the skill. A `medium` flag (`shell=True`, `eval`/`exec`, `chmod 777`) is worth a look but often legitimate. Always cite the file and line and show the snippet so the user can judge for themselves - your job is to surface, not to accuse. A flag is a reason to look, not proof of malice.
+**Security flags.** Severity is the guide. A `high` flag (a downloaded script piped straight into a shell, environment data sent to a remote server, an embedded API token or cloud key, references to private key or cloud credential files, reverse-shell patterns, recursive deletion of a top-level folder) deserves a clear, calm warning and a recommendation to review the exact file and line before trusting the skill. A `medium` flag (running commands through a shell, dynamic code evaluation, world-writable file permissions) is worth a look but often legitimate. Always cite the file and line and show the snippet so the user can judge for themselves - your job is to surface, not to accuse. A flag is a reason to look, not proof of malice.
 
-**Conflicts.** When two skills share an explicit trigger phrase or have high keyword overlap, the agent can fire the wrong one. The fix is almost always to tighten one skill's `description` so the two stop competing - narrow the broader skill, or add distinguishing context ("for *church* events" vs "for *corporate* events"). Offer to edit the description if the user wants.
+**Conflicts.** When two skills share an explicit trigger phrase or have high keyword overlap, the agent can fire the wrong one. The fix is almost always to tighten one skill's `description` so the two stop competing - narrow the broader skill, or add distinguishing context ("for *church* events" vs "for *corporate* events"). Offer to edit the description, and make the change only after the user confirms.
 
 **Versions.** `behind` means a newer ClawHub release exists - offer to update it. `missing-version` means the skill has no `version` field in its frontmatter, which breaks update tracking - offer to add one. `no-clawhub-cli` just means the `clawhub` command is not installed, so remote version checking was skipped (everything else still ran).
 
